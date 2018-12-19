@@ -106,7 +106,7 @@ if __name__ == "__main__":
 			res, feature = alexnet(inputs)
 			targets = getTargets(inputs)
 			outputs = net(feature)
-			loss = F.cross_entropy(outputs, target) + l2_loss(outputs, targets)
+			loss = F.cross_entropy(outputs, targets) + l2_loss(outputs, targets)
 			
 			accu_loss += loss.item()
 			loss.backward()
