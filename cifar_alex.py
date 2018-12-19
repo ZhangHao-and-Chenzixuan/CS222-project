@@ -87,7 +87,7 @@ if __name__ == "__main__":
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
 
-            outputs = net(inputs)
+            outputs, features = net(inputs)
             # Update parameters
             loss = crit(outputs, labels)
             loss.backward()

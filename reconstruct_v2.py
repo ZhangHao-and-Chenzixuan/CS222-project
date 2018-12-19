@@ -46,7 +46,7 @@ class ReconstructNet2(nn.Module):
 
 
 if __name__ == "__main__":
-	keepOn = True
+	keepOn = False
 	# Prepare the dataset
 	transform = transforms.Compose(
 		[transforms.ToTensor(),

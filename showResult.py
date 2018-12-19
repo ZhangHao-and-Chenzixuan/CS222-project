@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torchvision
 import torchvision.transforms as transforms
-
+ 
 from reconstruct import ReconstructNet
 from reconstruct import imshow as imshow
 from reconstruct import getTargets as getTargets
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    device = torch.device("cuda:0") 
+    device = torch.device("cuda:0")
     res = os.listdir("./data/exp3")
     alexnet = torch.load("alex_trained.pkl")
     st = 0
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     net.to(device)
     alexnet.eval()
     alexnet.to(device)
-    dataiter = iter(testloader) 
+    dataiter = iter(testloader)
 
     with torch.no_grad():
         for i in range(1, 30):
