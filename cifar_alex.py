@@ -30,9 +30,9 @@ class CifarAlexNet(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
-        y = x
+        y = x # that is reconstruct_v2
         x = self.pool(F.relu(self.conv5(x)))
-        # y = x
+        # y = x # that is reconstruct
         x = self.dropout(x.view(-1, 128 * 4 * 4))
         x = self.dropout(F.relu(self.fc1(x)))
         x = self.dropout(F.relu(self.fc2(x)))

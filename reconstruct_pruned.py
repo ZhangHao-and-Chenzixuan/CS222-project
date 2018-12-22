@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from cifar_alex import CifarAlexNet
+from prune_utility import *
 
 
 def imshow(img):
@@ -27,24 +28,25 @@ def show_result(img):
 	torchvision.utils.make_grid(img)
 	img = img / 2 + 0.5
 	imshow(img)
-    
-class ReconstructNet(nn.Module):
+
+def crit(t):
+	return (sum(t ** 2) / 2)
+
+class ReconstructNet2(nn.Module):
 	def __init__(self):
-		super(ReconstructNet, self).__init__()
-		self.conv1 = nn.Conv2d(128, 128, 3, padding = 1)
-		self.conv2 = nn.Conv2d(128, 128, 3, padding = 1)
-		self.conv3 = nn.Conv2d(128, 128, 3, padding = 1)
-		self.convt1 = nn.ConvTranspose2d(128, 64, 5, padding = 2, output_padding = 1, stride = 2)
-		self.convt2 = nn.ConvTranspose2d(64, 32, 5, padding = 2, output_padding = 1, stride = 2)
-		self.convt3 = nn.ConvTranspose2d(32, 3, 5, padding =2 , output_padding = 1, stride = 2)
+		super(ReconstructNet2, self).__init__()
+		self.conv1 = nn.Conv2d(96, 96, 3, padding = 1)
+		self.conv2 = nn.Conv2d(96, 96, 3, padding = 1)
+		self.conv3 = nn.Conv2d(96, 96, 3, padding = 1)
+		self.convt1 = nn.ConvTranspose2d(96, 32, 5, padding = 2, output_padding = 1, stride = 2)
+		self.convt2 = nn.ConvTranspose2d(32, 3, 5, padding = 2, output_padding = 1, stride = 2)
 	def forward(self, inputs):
 		x = inputs
 		x = F.leaky_relu(self.conv1(x), negative_slope = 0.2)
 		x = F.leaky_relu(self.conv2(x), negative_slope = 0.2)
 		x = F.leaky_relu(self.conv3(x), negative_slope = 0.2)
 		x = F.leaky_relu(self.convt1(x), negative_slope = 0.2)
-		x = F.leaky_relu(self.convt2(x), negative_slope = 0.2)
-		x = self.convt3(x)
+		x = self.convt2(x)
 		return x
 
 if __name__ == "__main__":
@@ -66,33 +68,42 @@ if __name__ == "__main__":
 	# Load the pretrained alexnet
 	alexnet = torch.load("alex_trained.pkl")
 	alexnet.eval()
-	# Init ReconstructNet
-	net = ReconstructNet()
+	# Init ReconstructNet2
+	net = ReconstructNet2()
 	
 	st = 0
 	if keepOn:
-		res = os.listdir("./data/exp2")
+		res = os.listdir("./data/exp3_prune")
 		for netFile in res:
 			last = int(re.sub("\D","",netFile))
 			if last > st:
 				st = last
-		net = torch.load("./data/exp2/reconstruct" + str(st) + ".pkl", \
-						map_location = {"cuda:2":"cuda:0"})
+		net = torch.load("./data/exp3_prune/reconstruct" + str(st) + ".pkl")
 
 
 	net.to(device)
-	l2_loss = nn.MSELoss(size_average = False)
-	
+	crit = nn.MSELoss()
 	alexnet.to(device)
+
 	# Defince the detail of training
-	learningRate = [0.0001 for i in range(40)]
-	learningRate.extend([0.00001 for i in range(31)])
+	learningRate = [0.0001 for i in range(50)]
+	learningRate.extend([0.00005 for i in range(40)])
+	#ADMM algorithm parameters initialization
+	Z1 = projection(net.conv1.weight.data, configuration.P1)
+	U1 = torch.zeros(Z1.size()).cuda()
+	zeros1 = U1
+	Z2 = projection(net.conv2.weight.data, configuration.P2)
+	U2 = torch.zeros(Z2.size()).cuda()
+	zeros2 = U2
+	Z3 = projection(net.conv3.weight.data, configuration.P3)
+	U3 = torch.zeros(Z3.size()).cuda()
+	zeros3 = U3
 	# Record performance
-	train_loss = []
+	retrain_loss = []
 	test_loss = []
 	x_axis = []
-	# Train and Test
-	for epoch in range(st, 71):
+	#train and test
+	for epoch in range(st, 90):
 		x_axis.append(epoch + 1)
 		optimizer = optim.Adam(net.parameters(), lr = learningRate[epoch])
 		# Train
@@ -105,16 +116,29 @@ if __name__ == "__main__":
 			inputs = inputs.to(device)
 			res, feature = alexnet(inputs)
 			targets = getTargets(inputs)
-			outputs = net(feature)
-			loss = F.cross_entropy(outputs, targets) + 0.00005 * l2_loss() * net.conv1.parameters
-			
+			outputs = net(feature) #forward step
+			loss = crit(outputs, targets) + 0.00005*(crit(net.conv1.weight.data - Z1 + U1, zeros1) + crit(net.conv2.weight.data - Z2 + U2, zeros2) + crit(net.conv3.weight.data - Z3 + U3, zeros3))
 			accu_loss += loss.item()
 			loss.backward()
 			optimizer.step()
 			print('[train] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
-		train_loss.append(accu_loss / batchNum)
-		batchNum = 0
+		retrain_loss.append(accu_loss / batchNum)
+		#ADMM
+		Z1 = net.conv1.weight.data + U1
+		Z1 = projection(Z1, percent=configuration.P1)
+		U1 = U1 + net.conv1.weight.data - Z1
+
+		Z2 = net.conv2.weight.data + U2
+		Z2 = projection(Z2, percent=configuration.P2)
+		U2 = U2 + net.conv2.weight.data - Z2
+
+		Z3 = net.conv3.weight.data + U3
+		Z3 = projection(Z3, percent=configuration.P3)
+		U3 = U3 + net.conv3.weight.data - Z3
+		
 		# Test
+		batchNum = 0
+
 		with torch.no_grad():
 			accu_loss = 0
 			for i, data in enumerate(testloader, 0):
@@ -124,27 +148,27 @@ if __name__ == "__main__":
 				res, feature = alexnet(inputs)
 				targets = getTargets(inputs)
 				outputs = net(feature)
-				loss = l2_loss(outputs, targets)
+				loss = crit(outputs, targets) + 0.00005 * (crit(net.conv1.weight.data- Z1 + U1, zeros1) + crit(net.conv2.weight.data - Z2 + U2, zeros2) + crit(net.conv3.weight.data - Z3 + U3, zeros3))
 				accu_loss += loss.item()
 				if i == 0:
-					imshow(targets[73])
-					imshow(outputs[73])
+					imshow(targets[15])
+					imshow(outputs[15])
 
 				print('[test] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
+
 		test_loss.append(accu_loss / batchNum)
-		pdf = PdfPages("reconstruct.pdf")
+		pdf = PdfPages("reconstruct_v2_prune.pdf")
 		plt.figure(1)
-		plt.plot(x_axis, train_loss, x_axis, test_loss)
+		plt.plot(x_axis, retrain_loss, x_axis, test_loss)
 		plt.xlabel("epoch")
 		plt.ylabel("loss")
 		pdf.savefig()
 		plt.close()
 		pdf.close()
-
 		# Save the net
-		net_name = "./data/exp2/reconstruct" + str(epoch+1) + ".pkl"
+		net_name = "./data/exp3_prune/reconstruct" + str(epoch+1) + ".pkl"
 		torch.save(net, net_name)
-	print("over")
+	print("train step complete")
 
 	# little test before official work
 	#dataiter = iter(trainloader)
@@ -153,4 +177,70 @@ if __name__ == "__main__":
 	#res, feature = alexnet(images)
 
 	#targets = getTargets(images)
-	
+
+	# prune step
+	print(">pruning conv1")
+	net.conv1.weight.data, net.conv1.weight._grad = apply_prune(net.conv1.weight, configuration.P1)
+	print(">pruning conv2")
+	net.conv2.weight.data, net.conv2.weight._grad = apply_prune(net.conv2.weight, configuration.P1)
+	print(">pruning conv3")
+	net.conv3.weight.data, net.conv3.weight._grad = apply_prune(net.conv3.weight, configuration.P1)
+	print("pruning step complete")
+
+	# retrain step
+	# Record performance
+	retrain_loss = []
+	test_loss = []
+	x_axis = []
+	for epoch in range(0, 90):
+		x_axis.append(epoch + 1)
+		optimizer = optim.Adam(net.parameters(), lr = learningRate[epoch])
+		# Train
+		accu_loss = 0
+		batchNum = 0
+		for i, data in enumerate(trainloader, 0):
+			batchNum += 1
+			optimizer.zero_grad()
+			inputs, labels = data
+			inputs = inputs.to(device)
+			res, feature = alexnet(inputs)
+			targets = getTargets(inputs)
+			outputs = net(feature) #forward step
+			loss = crit(outputs, targets)
+			accu_loss += loss.item()
+			loss.backward()
+			optimizer.step()
+			print('[retrain] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
+		retrain_loss.append(accu_loss / batchNum)
+		# Test
+		batchNum = 0
+		with torch.no_grad():
+			accu_loss = 0
+			for i, data in enumerate(testloader, 0):
+				batchNum += 1
+				inputs, labels = data
+				inputs = inputs.to(device)
+				res, feature = alexnet(inputs)
+				targets = getTargets(inputs)
+				outputs = net(feature)
+				loss = crit(outputs, targets)
+				accu_loss += loss.item()
+				if i == 0:
+					imshow(targets[15])
+					imshow(outputs[15])
+
+				print('[test] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
+
+		test_loss.append(accu_loss / batchNum)
+		pdf = PdfPages("reconstruct_v2_prune_retrain.pdf")
+		plt.figure(1)
+		plt.plot(x_axis, retrain_loss, x_axis, test_loss)
+		plt.xlabel("epoch")
+		plt.ylabel("loss")
+		pdf.savefig()
+		plt.close()
+		pdf.close()
+		# Save the net
+		net_name = "./data/exp3_retrain/reconstruct" + str(epoch+1) + ".pkl"
+		torch.save(net, net_name)
+	print("retrain step complete")
