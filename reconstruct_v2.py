@@ -46,7 +46,7 @@ class ReconstructNet2(nn.Module):
 
 
 if __name__ == "__main__":
-	keepOn = True
+	keepOn = False
 	# Prepare the dataset
 	transform = transforms.Compose(
 		[transforms.ToTensor(),
@@ -122,9 +122,9 @@ if __name__ == "__main__":
 				outputs = net(feature)
 				loss = crit(outputs, targets)
 				accu_loss += loss.item()
-				if i == 0:
-					imshow(targets[15])
-					imshow(outputs[15])
+				# if i == 0:
+				# 	imshow(targets[15])
+				# 	imshow(outputs[15])
 
 				print('[test] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
 		test_loss.append(accu_loss / batchNum)

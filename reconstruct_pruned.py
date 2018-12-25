@@ -72,13 +72,16 @@ if __name__ == "__main__":
 	net = ReconstructNet2()
 	
 	st = 0
+	st_retrain = 0
 	if keepOn:
 		res = os.listdir("./data/exp3_prune")
 		for netFile in res:
 			last = int(re.sub("\D","",netFile))
 			if last > st:
 				st = last
-		net = torch.load("./data/exp3_prune/reconstruct" + str(st) + ".pkl")
+		if st > 0:
+			net = torch.load("./data/exp3_prune/reconstruct" + str(st) + ".pkl")
+			
 
 
 	net.to(device)
@@ -178,14 +181,7 @@ if __name__ == "__main__":
 
 	#targets = getTargets(images)
 
-	# prune step
-	print(">pruning conv1")
-	net.conv1.weight.data, net.conv1.weight._grad = apply_prune(net.conv1.weight, configuration.P1)
-	print(">pruning conv2")
-	net.conv2.weight.data, net.conv2.weight._grad = apply_prune(net.conv2.weight, configuration.P1)
-	print(">pruning conv3")
-	net.conv3.weight.data, net.conv3.weight._grad = apply_prune(net.conv3.weight, configuration.P1)
-	print("pruning step complete")
+
 
 	# retrain step
 	# Record performance
@@ -209,6 +205,13 @@ if __name__ == "__main__":
 			loss = crit(outputs, targets)
 			accu_loss += loss.item()
 			loss.backward()
+			#prune step
+			print("net.conv1:")
+			net.conv1.weight.data, net.conv1.weight._grad = apply_prune(net.conv1.weight, configuration.P1)
+			print("net.conv2:")
+			net.conv2.weight.data, net.conv2.weight._grad = apply_prune(net.conv2.weight, configuration.P1)
+			print("net.conv3:")
+			net.conv3.weight.data, net.conv3.weight._grad = apply_prune(net.conv3.weight, configuration.P1)
 			optimizer.step()
 			print('[retrain] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
 		retrain_loss.append(accu_loss / batchNum)

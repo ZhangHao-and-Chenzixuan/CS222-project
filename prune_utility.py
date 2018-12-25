@@ -2,9 +2,9 @@ import torch
 import numpy as np
 
 class PruneConfiguration():
-    P1 = 80
-    P2 = 80
-    P3 = 80
+    P1 = 90
+    P2 = 90
+    P3 = 90
     @staticmethod
     def display():
         print("P1 is %f"% PruneConfiguration.P1)
