@@ -1,4 +1,5 @@
 import torch
+import os, re
 import numpy as np
 
 class PruneConfiguration():
@@ -48,3 +49,12 @@ def apply_prune(weight, percent):
     grad_pruned = np.multiply(weight._grad.cpu().numpy(), mask)
     return torch.from_numpy(weight_arr_pruned).cuda(), torch.from_numpy(grad_pruned).cuda()
 
+def loadNet(pathToNet):
+    st = 0
+    res = os.listdir(pathToNet)
+    for netFile in res:
+        last = int(re.sub("\D","",netFile))
+        if last > st:
+            st = last
+    net = torch.load(pathToNet + "/reconstruct" + str(st) + ".pkl")
+    return net

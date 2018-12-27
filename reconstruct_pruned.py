@@ -50,7 +50,7 @@ class ReconstructNet2(nn.Module):
 		return x
 
 if __name__ == "__main__":
-	keepOn = True
+	keepOn = False
 	# Prepare the dataset
 	transform = transforms.Compose(
 		[transforms.ToTensor(),
@@ -74,13 +74,7 @@ if __name__ == "__main__":
 	st = 0
 	st_retrain = 0
 	if keepOn:
-		res = os.listdir("./data/exp3_prune")
-		for netFile in res:
-			last = int(re.sub("\D","",netFile))
-			if last > st:
-				st = last
-		if st > 0:
-			net = torch.load("./data/exp3_prune/reconstruct" + str(st) + ".pkl")
+		net = loadNet("./data/exp3_prune")
 			
 
 
@@ -123,21 +117,22 @@ if __name__ == "__main__":
 			loss = crit(outputs, targets) + 0.00005*(crit(net.conv1.weight.data - Z1 + U1, zeros1) + crit(net.conv2.weight.data - Z2 + U2, zeros2) + crit(net.conv3.weight.data - Z3 + U3, zeros3))
 			accu_loss += loss.item()
 			loss.backward()
+			#ADMM
+			Z1 = net.conv1.weight.data + U1
+			Z1 = projection(Z1, percent=configuration.P1)
+			U1 = U1 + net.conv1.weight.data - Z1
+
+			Z2 = net.conv2.weight.data + U2
+			Z2 = projection(Z2, percent=configuration.P2)
+			U2 = U2 + net.conv2.weight.data - Z2
+
+			Z3 = net.conv3.weight.data + U3
+			Z3 = projection(Z3, percent=configuration.P3)
+			U3 = U3 + net.conv3.weight.data - Z3
+		
 			optimizer.step()
 			print('[train] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
 		retrain_loss.append(accu_loss / batchNum)
-		#ADMM
-		Z1 = net.conv1.weight.data + U1
-		Z1 = projection(Z1, percent=configuration.P1)
-		U1 = U1 + net.conv1.weight.data - Z1
-
-		Z2 = net.conv2.weight.data + U2
-		Z2 = projection(Z2, percent=configuration.P2)
-		U2 = U2 + net.conv2.weight.data - Z2
-
-		Z3 = net.conv3.weight.data + U3
-		Z3 = projection(Z3, percent=configuration.P3)
-		U3 = U3 + net.conv3.weight.data - Z3
 		
 		# Test
 		batchNum = 0
@@ -153,9 +148,9 @@ if __name__ == "__main__":
 				outputs = net(feature)
 				loss = crit(outputs, targets) + 0.00005 * (crit(net.conv1.weight.data- Z1 + U1, zeros1) + crit(net.conv2.weight.data - Z2 + U2, zeros2) + crit(net.conv3.weight.data - Z3 + U3, zeros3))
 				accu_loss += loss.item()
-				if i == 0:
-					imshow(targets[15])
-					imshow(outputs[15])
+				# if i == 0:
+				# 	imshow(targets[15])
+				# 	imshow(outputs[15])
 
 				print('[test] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
 
@@ -228,9 +223,9 @@ if __name__ == "__main__":
 				outputs = net(feature)
 				loss = crit(outputs, targets)
 				accu_loss += loss.item()
-				if i == 0:
-					imshow(targets[15])
-					imshow(outputs[15])
+				# if i == 0:
+				# 	imshow(targets[15])
+				# 	imshow(outputs[15])
 
 				print('[test] epoch: %d, batch: %d, loss: %.5f' % (epoch + 1, (i + 1), accu_loss / (i+1)))
 
